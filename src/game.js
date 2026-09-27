@@ -645,6 +645,7 @@
     wireModal("srcModal", $$("[data-srcs]"), "srcClose");
 
     $("#startBtn").addEventListener("click", () => {
+      Opening.stopAudio();
       state.startTime = Date.now();
       showScreen("sort");
       renderSort();
@@ -675,6 +676,7 @@
       showFinal();
     } else {
       showScreen("intro");
+      if (Opening.shouldShow()) Opening.play();
     }
   }
 
