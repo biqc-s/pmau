@@ -17,6 +17,7 @@
     </div>
     <div class="hdr-side">
       <span class="counter" id="counter"></span>
+      <button class="icon-btn" id="muteBtn" type="button" aria-label="كتم الصوت">🔊</button>
       <button class="icon-btn" id="helpBtn" aria-label="كيف ألعب؟">؟</button>
     </div>
   </div>
@@ -64,8 +65,12 @@
 <!-- ===================== الترتيب ===================== -->
 <main id="orderScreen" class="screen" hidden>
   <h2 class="secttl">ترتيب الملفات — من الأقدم إلى الأحدث</h2>
-  <p class="guide" id="orderGuide" aria-live="polite"><span class="dot"></span><span id="orderText">رتّبها بالأسهم حسب التواريخ الظاهرة، من الأقدم أعلى إلى الأحدث أسفل، ثم اضغط «اعتمد الترتيب».</span></p>
+  <p class="guide" id="orderGuide" aria-live="polite"><span class="dot"></span><span id="orderText">ابدأ بالأقدم: انقر الملف صاحب أقدم تاريخ ليأخذ الموضع ١.</span></p>
+  <p class="order-edge">▲ الأقدم</p>
   <div class="order" id="orderList"></div>
+  <p class="order-edge">▼ الأحدث</p>
+  <h3 class="pool-ttl" id="poolTtl">الملفات — انقر الأقدم منها</h3>
+  <div class="order pool" id="orderPool"></div>
   <button id="checkBtn" class="ui">اعتمد الترتيب</button>
 </main>
 
@@ -120,7 +125,7 @@
     <ul class="steps">
       <li><span class="n">١</span><span>انقر ورقة على الطاولة فترتفع.</span></li>
       <li><span class="n">٢</span><span>انقر الملف الذي تظنها تخصّه أسفل الشاشة.</span></li>
-      <li><span class="n">٣</span><span>بعد امتلاء الملفات، رتّبها من الأقدم إلى الأحدث.</span></li>
+      <li><span class="n">٣</span><span>بعد امتلاء الملفات، انقرها واحدًا تلو الآخر من الأقدم إلى الأحدث. النقر على ملف في الخط الزمني يعيده.</span></li>
     </ul>
     <p class="modal-note">لا خسارة في اللعبة: الورقة الخاطئة تعود إلى الطاولة فقط.</p>
     <button id="helpClose" class="ui" style="width:100%">فهمت</button>

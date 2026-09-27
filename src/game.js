@@ -22,6 +22,72 @@
     return a;
   }
 
+  /* ===================== الأصوات =====================
+   * تُولَّد بـ Web Audio فلا ملفات صوتية، ويُحفظ كتم الصوت لكل لاعب.
+   * المتصفحات لا تسمح بالصوت قبل أول نقرة، وكل الأصوات هنا تأتي بعد نقرة. */
+  const MUTE_KEY = "archiveGame:muted";
+  const sfx = (function () {
+    let ctx = null;
+    let muted = false;
+    try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch (e) { /* تجاهل */ }
+
+    function audio() {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        ctx = new AC();
+      }
+      if (ctx.state === "suspended") ctx.resume();
+      return ctx;
+    }
+
+    // نغمة قصيرة: تردد، مدة، شكل الموجة، ارتفاع الصوت، تأخير البدء، تردد النهاية
+    function tone(freq, dur, type, vol, delay, endFreq) {
+      const ac = audio();
+      if (!ac) return;
+      const t = ac.currentTime + (delay || 0);
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = type || "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(vol || 0.2, t + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(gain).connect(ac.destination);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    }
+
+    const sounds = {
+      tap:   () => tone(1400, 0.05, "triangle", 0.18, 0, 900),     // رفع ورقة / اختيار ملف
+      back:  () => tone(700, 0.06, "triangle", 0.15, 0, 450),      // إعادة ملف
+      ok:    () => { tone(660, 0.09, "sine", 0.2); tone(990, 0.14, "sine", 0.2, 0.07); },
+      err:   () => { tone(220, 0.12, "square", 0.07, 0, 180); tone(180, 0.16, "square", 0.07, 0.1, 140); },
+      win:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.22, "sine", 0.18, i * 0.1))
+    };
+
+    return {
+      play(name) {
+        if (muted || !sounds[name]) return;
+        try { sounds[name](); } catch (e) { /* تجاهل */ }
+      },
+      get muted() { return muted; },
+      toggle() {
+        muted = !muted;
+        try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) { /* تجاهل */ }
+        return muted;
+      }
+    };
+  })();
+
+  function renderMute() {
+    const btn = $("#muteBtn");
+    btn.textContent = sfx.muted ? "🔇" : "🔊";
+    btn.setAttribute("aria-label", sfx.muted ? "تشغيل الصوت" : "كتم الصوت");
+    btn.setAttribute("aria-pressed", String(sfx.muted));
+  }
+
   /* ===================== الحالة ===================== */
   const ALL_SCRAPS = FILES.flatMap((f, fi) =>
     f.scraps.map((s, si) => ({
@@ -46,10 +112,10 @@
       placed: [],
       rotations: {},
       lifted: null,
-      order: null,
-      pickedIndex: null,
-      orderChecked: false,
-      correctMask: null
+      pool: null,
+      slots: null,
+      locked: null,
+      returned: []
     };
   }
 
@@ -173,6 +239,7 @@
 
   function onPaperClick(id) {
     state.lifted = state.lifted === id ? null : id;
+    sfx.play(state.lifted ? "tap" : "back");
     setGuide(
       state.lifted
         ? "الآن انقر الملف الذي تظنها تخصّه أسفل الشاشة."
@@ -187,6 +254,7 @@
     if (scrap.fileId === fileId) {
       state.placed.push(scrap.id);
       state.lifted = null;
+      sfx.play(state.placed.length === ALL_SCRAPS.length ? "win" : "ok");
       setGuide("أحسنت! انقر أي ورقة أخرى على الطاولة.");
       if (state.placed.length === ALL_SCRAPS.length) {
         setGuide("اكتمل فرز جميع الأوراق. جارٍ الانتقال للترتيب…");
@@ -198,6 +266,7 @@
     } else {
       state.tries += 1;
       state.lifted = null;
+      sfx.play("err");
       setGuide(scrap.key, true);
       const slotEl = $('.file-slot[data-id="' + fileId + '"]');
       if (slotEl) {
@@ -208,98 +277,139 @@
     renderSort();
   }
 
-  /* ===================== شاشة الترتيب ===================== */
+  /* ===================== شاشة الترتيب =====================
+   * اللاعب ينقر الملفات بالترتيب من الأقدم إلى الأحدث، فيذهب كل ملف إلى أول موضع فارغ.
+   * النقر على ملف في الخط الزمني يعيده. عند الاعتماد تُثبَّت المواضع الصحيحة وتعود الخاطئة.
+   * slots[i] = معرّف الملف في الموضع i أو null، و locked[i] = الموضع مثبّت صحيحًا.
+   * pool = ترتيب عشوائي ثابت لكل الملفات، تُعرض منه غير الموضوعة. */
   function startOrderPhase() {
-    let order = shuffle(CORRECT_ORDER);
-    if (order.every((id, i) => id === CORRECT_ORDER[i])) {
-      order = shuffle(order);
-    }
-    state.order = order;
-    state.pickedIndex = null;
-    state.orderChecked = false;
-    state.correctMask = null;
+    state.pool = shuffle(CORRECT_ORDER);
+    state.slots = CORRECT_ORDER.map(() => null);
+    state.locked = CORRECT_ORDER.map(() => false);
+    state.returned = [];
     showScreen("order");
+    defaultOrderGuide();
     renderOrder();
   }
 
-  function renderOrder(justChecked) {
+  function firstEmpty() {
+    return state.slots.indexOf(null);
+  }
+
+  function setOrderGuide(text, isErr) {
+    $("#orderText").textContent = text;
+    $("#orderGuide").classList.toggle("err", !!isErr);
+  }
+
+  function defaultOrderGuide() {
+    const next = firstEmpty();
+    if (next === -1) {
+      setOrderGuide("اكتمل الخط الزمني. راجع التواريخ ثم اضغط «اعتمد الترتيب».");
+    } else if (state.slots.every((s) => s === null)) {
+      setOrderGuide("ابدأ بالأقدم: انقر الملف صاحب أقدم تاريخ ليأخذ الموضع ١.");
+    } else {
+      setOrderGuide("انقر الملف التالي في القِدم ليأخذ الموضع " + toAr(next + 1) + ".");
+    }
+  }
+
+  function renderOrder() {
     const list = $("#orderList");
-    const last = state.order.length - 1;
+    const pool = $("#orderPool");
+    const next = firstEmpty();
+    const returned = state.returned || [];
     list.innerHTML = "";
-    state.order.forEach((fileId, i) => {
-      const f = FILES.find((x) => x.id === fileId);
-      const el = document.createElement("div");
-      const mark = state.correctMask ? (state.correctMask[i] ? " correct" : " incorrect") : "";
-      el.className = "order-item" + (state.pickedIndex === i ? " picked" : "") + mark;
-      el.style.setProperty("--fcolor", "var(--" + fileColor(fileId) + ")");
+    pool.innerHTML = "";
+
+    state.slots.forEach((fileId, i) => {
+      const el = document.createElement("button");
+      el.type = "button";
       el.dataset.index = String(i);
-      el.innerHTML =
-        '<span class="pos">' + toAr(i + 1) + "</span>" +
-        '<span class="oi-main">' +
-        '<span class="fn">' + f.name + "</span>" +
-        '<span class="od">' + f.date + "</span>" +
-        "</span>" +
-        '<span class="oi-moves">' +
-        '<button class="mv" type="button" aria-label="تحريك للأعلى"' + (i === 0 ? " disabled" : "") + ">▲</button>" +
-        '<button class="mv" type="button" aria-label="تحريك للأسفل"' + (i === last ? " disabled" : "") + ">▼</button>" +
-        "</span>";
-      el.addEventListener("click", () => onOrderItemClick(i));
-      const [up, down] = el.querySelectorAll(".mv");
-      up.addEventListener("click", (e) => { e.stopPropagation(); moveOrderItem(i, -1); });
-      down.addEventListener("click", (e) => { e.stopPropagation(); moveOrderItem(i, 1); });
-      if (justChecked && state.correctMask && !state.correctMask[i]) {
-        el.classList.add("wrong");
-        setTimeout(() => el.classList.remove("wrong"), 350);
+      const pos = '<span class="pos">' + (state.locked[i] ? "✓" : toAr(i + 1)) + "</span>";
+      if (fileId === null) {
+        el.className = "order-item empty" + (i === next ? " next" : "");
+        el.disabled = true;
+        el.innerHTML = pos + '<span class="oi-main"><span class="fn">' +
+          (i === next ? "الموضع التالي" : "موضع فارغ") + "</span></span>";
+      } else {
+        const f = FILES.find((x) => x.id === fileId);
+        el.className = "order-item" + (state.locked[i] ? " correct" : "");
+        el.style.setProperty("--fcolor", "var(--" + fileColor(fileId) + ")");
+        el.disabled = state.locked[i];
+        el.setAttribute("aria-label", f.name + (state.locked[i] ? " — مثبّت في موضعه" : " — انقر لإعادته"));
+        el.innerHTML = pos +
+          '<span class="oi-main"><span class="fn">' + f.name + '</span><span class="od">' + f.date + "</span></span>" +
+          (state.locked[i] ? "" : '<span class="oi-act" aria-hidden="true">✕</span>');
+        el.addEventListener("click", () => unplace(i));
       }
       list.appendChild(el);
     });
+
+    const remaining = state.pool.filter((id) => !state.slots.includes(id));
+    $("#poolTtl").hidden = remaining.length === 0;
+    remaining.forEach((fileId) => {
+      const f = FILES.find((x) => x.id === fileId);
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "order-item in-pool" + (returned.includes(fileId) ? " wrong" : "");
+      el.style.setProperty("--fcolor", "var(--" + fileColor(fileId) + ")");
+      el.innerHTML =
+        '<span class="oi-main"><span class="fn">' + f.name + '</span><span class="od">' + f.date + "</span></span>" +
+        '<span class="oi-act" aria-hidden="true">＋</span>';
+      el.addEventListener("click", () => place(fileId));
+      pool.appendChild(el);
+    });
+    state.returned = [];
+
+    $("#checkBtn").disabled = next !== -1;
     updateProgress();
     save();
   }
 
-  function moveOrderItem(i, dir) {
-    const j = i + dir;
-    if (j < 0 || j >= state.order.length) return;
-    const a = state.order;
-    [a[i], a[j]] = [a[j], a[i]];
-    state.correctMask = null;
-    state.pickedIndex = null;
+  function place(fileId) {
+    const i = firstEmpty();
+    if (i === -1) return;
+    state.slots[i] = fileId;
+    sfx.play("tap");
+    defaultOrderGuide();
     renderOrder();
   }
 
-  function onOrderItemClick(i) {
-    state.correctMask = null;
-    if (state.pickedIndex === null) {
-      state.pickedIndex = i;
-    } else if (state.pickedIndex === i) {
-      state.pickedIndex = null;
-    } else {
-      const arr = state.order;
-      [arr[state.pickedIndex], arr[i]] = [arr[i], arr[state.pickedIndex]];
-      state.pickedIndex = null;
-    }
+  function unplace(i) {
+    if (state.locked[i]) return;
+    state.slots[i] = null;
+    sfx.play("back");
+    defaultOrderGuide();
     renderOrder();
   }
 
   function onCheckOrder() {
-    const correctMask = state.order.map((id, i) => id === CORRECT_ORDER[i]);
-    const allCorrect = correctMask.every(Boolean);
-    state.correctMask = correctMask;
-    renderOrder(true);
+    if (firstEmpty() !== -1) return;
+    const wrong = [];
+    state.slots.forEach((id, i) => {
+      if (id === CORRECT_ORDER[i]) {
+        state.locked[i] = true;
+      } else {
+        wrong.push(id);
+        state.slots[i] = null;
+      }
+    });
 
-    if (allCorrect) {
-      $("#orderText").textContent = "الترتيب صحيح! الأرشيف مُرتّب بالكامل.";
-      $("#orderGuide").classList.remove("err");
+    sfx.play(wrong.length === 0 ? "win" : "err");
+    if (wrong.length === 0) {
+      setOrderGuide("الترتيب صحيح! الأرشيف مُرتّب بالكامل.");
       state.endTime = Date.now();
-      save();
-      setTimeout(showFinal, 600);
+      renderOrder();
+      setTimeout(showFinal, 700);
     } else {
-      const correctCount = correctMask.filter(Boolean).length;
       state.tries += 1;
-      $("#orderText").textContent =
-        "الملفات المظلّلة بالأحمر في غير موضعها الصحيح (" + toAr(correctCount) + " من " + toAr(correctMask.length) + " في موضعه). حرّكها بالأسهم حسب التواريخ، وحاول مجددًا.";
-      $("#orderGuide").classList.add("err");
-      save();
+      state.returned = wrong;
+      const ok = state.slots.length - wrong.length;
+      setOrderGuide(
+        (ok ? toAr(ok) + " في موضعها الصحيح وثُبّتت ✓. " : "") +
+        "عادت " + toAr(wrong.length) + " إلى الأسفل — ضعها في المواضع الفارغة حسب تواريخها.",
+        true
+      );
+      renderOrder();
     }
   }
 
@@ -526,6 +636,12 @@
 
     renderSources();
     wireModal("helpModal", [$("#helpBtn")], "helpClose");
+    renderMute();
+    $("#muteBtn").addEventListener("click", () => {
+      sfx.toggle();
+      renderMute();
+      sfx.play("tap");
+    });
     wireModal("srcModal", $$("[data-srcs]"), "srcClose");
 
     $("#startBtn").addEventListener("click", () => {
@@ -546,9 +662,15 @@
     if (state.screen === "sort") {
       showScreen("sort");
       renderSort();
-    } else if (state.screen === "order" && state.order) {
-      showScreen("order");
-      renderOrder();
+    } else if (state.screen === "order") {
+      // حفظ من نسخة سابقة بلا slots: نبدأ مرحلة الترتيب من جديد دون خسارة الفرز
+      if (Array.isArray(state.slots)) {
+        showScreen("order");
+        defaultOrderGuide();
+        renderOrder();
+      } else {
+        startOrderPhase();
+      }
     } else if (state.screen === "final" && state.endTime) {
       showFinal();
     } else {

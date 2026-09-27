@@ -93,6 +93,7 @@ body::before{
   background:rgba(238,247,242,.05);
   cursor:pointer; font-weight:700;
 }
+#muteBtn{ font-size:.95rem; line-height:1; }
 
 .link{
   background:none; border:0; cursor:pointer;
@@ -334,19 +335,21 @@ body::before{
 .file-slot.done .fn::after{ content:" ✓"; color:var(--green); }
 
 /* ===================== شاشة الترتيب ===================== */
-.order{ display:flex; flex-direction:column; gap:.6rem; }
+.order{ display:flex; flex-direction:column; gap:.5rem; }
 .order-item{
   --fcolor:var(--blue);
   display:flex; align-items:center; gap:.8rem;
-  padding:.8rem .9rem;
+  width:100%; min-height:3.6rem;
+  padding:.7rem .9rem;
+  text-align:start;
   background:var(--ink-2);
   border:1px solid var(--line-2);
   border-inline-start:.35rem solid var(--fcolor);
   border-radius:var(--radius-sm);
   cursor:pointer;
-  transition:transform .15s ease, outline-color .15s ease;
+  transition:transform .15s ease, border-color .15s ease, background .15s ease;
 }
-.order-item:hover{ transform:translateY(-.1rem); }
+.order-item:not(:disabled):hover{ transform:translateY(-.1rem); border-color:var(--green); }
 .order-item .pos{
   width:1.8rem; height:1.8rem; border-radius:50%;
   background:var(--ink-3); color:var(--on-ink-mute);
@@ -356,29 +359,35 @@ body::before{
 .order-item .oi-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:.15rem; }
 .order-item .fn{ font-weight:700; font-size:.95rem; }
 .order-item .od{
-  font-size:.75rem; color:var(--on-ink-faint);
+  font-size:.8rem; color:var(--on-ink-mute);
   direction:rtl; unicode-bidi:isolate;
 }
-
-.oi-moves{ display:flex; flex-direction:column; gap:.25rem; flex:none; }
-.mv{
-  width:2.3rem; height:2rem;
+.oi-act{
+  width:2rem; height:2rem; flex:none; border-radius:50%;
   display:flex; align-items:center; justify-content:center;
-  border:1px solid var(--line-2);
-  background:rgba(238,247,242,.06);
-  border-radius:.4rem;
-  font-size:.7rem; line-height:1;
-  cursor:pointer;
-  transition:background .15s ease, border-color .15s ease;
+  border:1px solid var(--line-2); color:var(--on-ink-mute);
+  font-size:.85rem;
 }
-.mv:hover:not(:disabled){ background:rgba(238,247,242,.14); border-color:var(--green); }
-.mv:disabled{ opacity:.28; cursor:not-allowed; }
-.order-item.picked{ outline:2px solid var(--green); outline-offset:2px; }
-.order-item.correct{ outline:2px solid var(--ok); outline-offset:2px; }
+.order-item.in-pool .oi-act{ border-color:var(--green); color:var(--green); font-size:1.1rem; }
+
+/* مواضع فارغة في الخط الزمني */
+.order-item.empty{
+  border-style:dashed; border-inline-start-width:1px;
+  background:transparent; cursor:default;
+  min-height:3rem; padding-block:.5rem;
+}
+.order-item.empty .fn{ font-weight:400; font-size:.85rem; color:var(--on-ink-faint); }
+.order-item.empty.next{ border-color:var(--green); background:rgba(90,185,28,.06); }
+.order-item.empty.next .fn{ color:var(--green); font-weight:700; }
+.order-item.empty.next .pos{ background:rgba(90,185,28,.2); color:var(--green); }
+
+.order-item.correct{ border-color:var(--ok); cursor:default; }
 .order-item.correct .pos{ background:rgba(75,207,111,.2); color:var(--ok); }
-.order-item.incorrect{ outline:2px solid var(--err); outline-offset:2px; opacity:.85; }
-.order-item.incorrect .pos{ background:rgba(224,87,122,.2); color:var(--err); }
-.order-item.wrong{ animation:shake .35s ease; }
+.order-item.wrong{ animation:shake .35s ease; outline:2px solid var(--err); outline-offset:2px; }
+
+.order-edge{ font-size:.75rem; color:var(--on-ink-faint); font-weight:700; margin-block:-.4rem; }
+.pool-ttl{ font-size:1rem; font-weight:800; margin-top:.4rem; }
+#checkBtn:disabled{ opacity:.4; cursor:not-allowed; }
 
 /* ===================== الخاتمة ===================== */
 .closing{ display:flex; flex-direction:column; gap:.9rem; }
