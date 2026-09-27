@@ -157,7 +157,8 @@
     intro: $("#intro"),
     sort: $("#sortScreen"),
     order: $("#orderScreen"),
-    final: $("#final")
+    final: $("#final"),
+    card: $("#cardScreen")
   };
 
   /* state.screen هي مرحلة اللعب المحفوظة، و view هي الشاشة المعروضة الآن.
@@ -166,6 +167,8 @@
 
   function showView(name) {
     view = name;
+    // صفحة البطاقة بلا هيدر حتى تخرج صورة الشاشة نظيفة
+    document.body.classList.toggle("card-mode", name === "card");
     Object.entries(screens).forEach(([k, el]) => {
       el.hidden = k !== name;
     });
@@ -211,9 +214,15 @@
     });
   }
 
+  function openCard() {
+    history.pushState({ v: "card" }, "");
+    showView("card");
+  }
+
   function onPopState() {
     if (Opening.isOpen()) Opening.skip();
-    if (histState() === "game" && state.screen !== "intro") resume();
+    if (histState() === "card" && state.screen === "final" && state.code) showView("card");
+    else if (histState() === "game" && state.screen !== "intro") resume();
     else showHome();
   }
 
@@ -506,12 +515,17 @@
     $("#stCode").textContent = code;
     state.code = code;
 
-    if (typeof FORM_URL === "string" && FORM_URL.trim()) {
-      $("#regLine").textContent = "احفظ البطاقة وانسخ الرمز أدناه، ثم ارفعهما في نموذج إتمام المشاركة:";
-      $("#regBtn").hidden = false;
-    } else {
-      $("#regLine").textContent = "احتفظ برمز الإتمام والبطاقة أدناه — سيُعلن نموذج إتمام المشاركة قريبًا.";
-      $("#regBtn").hidden = true;
+    // بطاقة الإتمام
+    $("#rcCode").textContent = code;
+    $("#rcTime").textContent = label;
+    $("#rcTries").textContent = toAr(state.tries);
+    try {
+      $("#rcDate").textContent = new Date(state.endTime || Date.now())
+        .toLocaleDateString("ar-SA", { day: "numeric", month: "long", year: "numeric" });
+    } catch (e) { /* تجاهل */ }
+
+    if (!(typeof FORM_URL === "string" && FORM_URL.trim())) {
+      $("#regStep").innerHTML = "<p><b>احتفظ بالصورة والرمز</b> — سيُعلن رابط المشاركة قريبًا.</p>";
     }
 
     save();
@@ -519,7 +533,7 @@
 
   /* ===================== أزرار الخاتمة ===================== */
   function onCopyCode() {
-    const code = $("#stCode").textContent;
+    const code = state.code || $("#stCode").textContent;
     const done = () => {
       const btn = $("#copyBtn");
       const original = btn.textContent;
@@ -638,13 +652,29 @@
     ctx.font = "400 26px Tajawal, sans-serif";
     ctx.fillText("كلية الحوسبة والمعلوماتية", midX, 1225);
 
-    const url = canvas.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "بطاقة-اتمام-الأرشيف.png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const name = "archive-game-card.png"; // اسم لاتيني: بعض المتصفحات تتجاهل الأسماء العربية
+    const msg = $("#saveMsg");
+    const fallback = "إن لم تُحفظ الصورة، صوّر الشاشة كما في الخطوة ١.";
+    try {
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+      const file = blob && typeof File === "function" ? new File([blob], name, { type: "image/png" }) : null;
+      // على الجوال: قائمة المشاركة تتيح «حفظ الصورة» في المعرض
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "بطاقة إتمام لعبة الأرشيف" });
+        msg.textContent = "اختر «حفظ الصورة» من القائمة، ثم أكمل الخطوة ٣.";
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = blob ? URL.createObjectURL(blob) : canvas.toDataURL("image/png");
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      msg.textContent = "بدأ التنزيل. " + fallback;
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // أغلق اللاعب قائمة المشاركة
+      msg.textContent = "تعذّر الحفظ في هذا المتصفح. " + fallback;
+    }
   }
 
   function onReset() {
@@ -707,6 +737,12 @@
     window.addEventListener("popstate", onPopState);
     $("#checkBtn").addEventListener("click", onCheckOrder);
     $("#copyBtn").addEventListener("click", onCopyCode);
+    $("#showCardBtn").addEventListener("click", openCard);
+    $("#toCardBtn").addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+    $("#cardBack").addEventListener("click", () => {
+      if (histState() === "card") history.back();
+      else showView("final");
+    });
     $("#saveBtn").addEventListener("click", onSaveCard);
     $("#resetBtn").addEventListener("click", onReset);
     $("#regBtn").addEventListener("click", () => {
