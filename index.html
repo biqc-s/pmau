@@ -9,6 +9,19 @@
 </head>
 <body>
 
+<!-- ===================== المقدمة المتحركة (الزيارة الأولى) ===================== -->
+<div id="opening" class="opening" hidden>
+  <canvas id="openingCanvas" aria-hidden="true"></canvas>
+  <div class="opening-gate">
+    <img src="assets/sadu.webp" alt="" aria-hidden="true">
+    <p class="og-kicker">اليوم الوطني السعودي ٩٦</p>
+    <h1 class="og-title">لعبة الأرشيف</h1>
+    <button id="openingPlay" class="ui big" type="button">▶ ابدأ المقدمة</button>
+    <p class="og-note">شغّل الصوت لتجربة أجمل</p>
+  </div>
+  <button id="openingSkip" class="opening-skip" type="button">تخطَّ ›</button>
+</div>
+
 <!-- ===================== الهيدر ===================== -->
 <header class="hdr">
   <div class="hdr-in">
@@ -144,6 +157,7 @@
 
 <script>const CARD_PORTRAIT="assets/musaid.jpg";const CARD_SADU="assets/sadu.webp";</script>
 <script src="src/data.js"></script>
+<script src="src/opening.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>

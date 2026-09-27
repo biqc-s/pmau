@@ -557,3 +557,35 @@ body::before{
   position:absolute; width:1px; height:1px;
   overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap;
 }
+
+/* ===================== المقدمة المتحركة ===================== */
+.opening{
+  position:fixed; inset:0; z-index:100;
+  background:var(--ink);
+  display:flex; align-items:center; justify-content:center;
+  transition:opacity .6s ease;
+}
+.opening[hidden]{ display:none; }
+.opening.out{ opacity:0; pointer-events:none; }
+.opening canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.opening-gate{
+  position:relative; z-index:1;
+  width:min(22rem, calc(100% - 2rem));
+  display:flex; flex-direction:column; align-items:center; gap:.8rem;
+  text-align:center;
+  transition:opacity .4s ease;
+}
+.opening.playing .opening-gate{ opacity:0; pointer-events:none; }
+.opening-gate img{ width:4.5rem; height:4.5rem; object-fit:contain; margin-bottom:.4rem; }
+.og-kicker{ color:var(--green); font-weight:700; font-size:.9rem; }
+.og-title{ font-size:2.1rem; font-weight:800; margin-bottom:.6rem; }
+.og-note{ color:var(--on-ink-faint); font-size:.8rem; }
+.opening-skip{
+  position:absolute; z-index:2;
+  bottom:max(1.2rem, env(safe-area-inset-bottom)); inset-inline-end:1.2rem;
+  background:rgba(238,247,242,.06);
+  border:1px solid var(--line-2); border-radius:999px;
+  padding:.45rem 1rem; font-size:.85rem; color:var(--on-ink-mute);
+  cursor:pointer;
+}
+.opening-skip:hover{ color:var(--on-ink); border-color:var(--green); }
