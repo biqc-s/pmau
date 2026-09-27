@@ -22,6 +22,72 @@
     return a;
   }
 
+  /* ===================== الأصوات =====================
+   * تُولَّد بـ Web Audio فلا ملفات صوتية، ويُحفظ كتم الصوت لكل لاعب.
+   * المتصفحات لا تسمح بالصوت قبل أول نقرة، وكل الأصوات هنا تأتي بعد نقرة. */
+  const MUTE_KEY = "archiveGame:muted";
+  const sfx = (function () {
+    let ctx = null;
+    let muted = false;
+    try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch (e) { /* تجاهل */ }
+
+    function audio() {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        ctx = new AC();
+      }
+      if (ctx.state === "suspended") ctx.resume();
+      return ctx;
+    }
+
+    // نغمة قصيرة: تردد، مدة، شكل الموجة، ارتفاع الصوت، تأخير البدء، تردد النهاية
+    function tone(freq, dur, type, vol, delay, endFreq) {
+      const ac = audio();
+      if (!ac) return;
+      const t = ac.currentTime + (delay || 0);
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = type || "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(vol || 0.2, t + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(gain).connect(ac.destination);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    }
+
+    const sounds = {
+      tap:   () => tone(1400, 0.05, "triangle", 0.18, 0, 900),     // رفع ورقة / اختيار ملف
+      back:  () => tone(700, 0.06, "triangle", 0.15, 0, 450),      // إعادة ملف
+      ok:    () => { tone(660, 0.09, "sine", 0.2); tone(990, 0.14, "sine", 0.2, 0.07); },
+      err:   () => { tone(220, 0.12, "square", 0.07, 0, 180); tone(180, 0.16, "square", 0.07, 0.1, 140); },
+      win:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.22, "sine", 0.18, i * 0.1))
+    };
+
+    return {
+      play(name) {
+        if (muted || !sounds[name]) return;
+        try { sounds[name](); } catch (e) { /* تجاهل */ }
+      },
+      get muted() { return muted; },
+      toggle() {
+        muted = !muted;
+        try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) { /* تجاهل */ }
+        return muted;
+      }
+    };
+  })();
+
+  function renderMute() {
+    const btn = $("#muteBtn");
+    btn.textContent = sfx.muted ? "🔇" : "🔊";
+    btn.setAttribute("aria-label", sfx.muted ? "تشغيل الصوت" : "كتم الصوت");
+    btn.setAttribute("aria-pressed", String(sfx.muted));
+  }
+
   /* ===================== الحالة ===================== */
   const ALL_SCRAPS = FILES.flatMap((f, fi) =>
     f.scraps.map((s, si) => ({
@@ -173,6 +239,7 @@
 
   function onPaperClick(id) {
     state.lifted = state.lifted === id ? null : id;
+    sfx.play(state.lifted ? "tap" : "back");
     setGuide(
       state.lifted
         ? "الآن انقر الملف الذي تظنها تخصّه أسفل الشاشة."
@@ -187,6 +254,7 @@
     if (scrap.fileId === fileId) {
       state.placed.push(scrap.id);
       state.lifted = null;
+      sfx.play(state.placed.length === ALL_SCRAPS.length ? "win" : "ok");
       setGuide("أحسنت! انقر أي ورقة أخرى على الطاولة.");
       if (state.placed.length === ALL_SCRAPS.length) {
         setGuide("اكتمل فرز جميع الأوراق. جارٍ الانتقال للترتيب…");
@@ -198,6 +266,7 @@
     } else {
       state.tries += 1;
       state.lifted = null;
+      sfx.play("err");
       setGuide(scrap.key, true);
       const slotEl = $('.file-slot[data-id="' + fileId + '"]');
       if (slotEl) {
@@ -300,6 +369,7 @@
     const i = firstEmpty();
     if (i === -1) return;
     state.slots[i] = fileId;
+    sfx.play("tap");
     defaultOrderGuide();
     renderOrder();
   }
@@ -307,6 +377,7 @@
   function unplace(i) {
     if (state.locked[i]) return;
     state.slots[i] = null;
+    sfx.play("back");
     defaultOrderGuide();
     renderOrder();
   }
@@ -323,6 +394,7 @@
       }
     });
 
+    sfx.play(wrong.length === 0 ? "win" : "err");
     if (wrong.length === 0) {
       setOrderGuide("الترتيب صحيح! الأرشيف مُرتّب بالكامل.");
       state.endTime = Date.now();
@@ -564,6 +636,12 @@
 
     renderSources();
     wireModal("helpModal", [$("#helpBtn")], "helpClose");
+    renderMute();
+    $("#muteBtn").addEventListener("click", () => {
+      sfx.toggle();
+      renderMute();
+      sfx.play("tap");
+    });
     wireModal("srcModal", $$("[data-srcs]"), "srcClose");
 
     $("#startBtn").addEventListener("click", () => {

@@ -93,6 +93,7 @@ body::before{
   background:rgba(238,247,242,.05);
   cursor:pointer; font-weight:700;
 }
+#muteBtn{ font-size:.95rem; line-height:1; }
 
 .link{
   background:none; border:0; cursor:pointer;
