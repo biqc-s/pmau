@@ -160,20 +160,71 @@
     final: $("#final")
   };
 
-  function showScreen(name) {
-    state.screen = name;
+  /* state.screen هي مرحلة اللعب المحفوظة، و view هي الشاشة المعروضة الآن.
+   * الرجوع إلى صفحة البداية لا يمسح المرحلة، فيكمل اللاعب من حيث توقف. */
+  let view = "intro";
+
+  function showView(name) {
+    view = name;
     Object.entries(screens).forEach(([k, el]) => {
       el.hidden = k !== name;
     });
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+    updateProgress();
+  }
+
+  function showScreen(name) {
+    state.screen = name;
+    showView(name);
     save();
+  }
+
+  /* ===================== سجل المتصفح (زر الرجوع) =====================
+   * سجلّان فقط: صفحة البداية {v:"home"} واللعب {v:"game"}، ومعهما المقدمة {v:"opening"} عند عرضها.
+   * التنقل بين مراحل اللعب لا يضيف سجلًا، فالرجوع من أي مرحلة يعيد إلى صفحة البداية. */
+  function histState() {
+    return (history.state && history.state.v) || null;
+  }
+
+  function showHome() {
+    showView("intro");
+    const inGame = state.screen !== "intro";
+    $("#startBtn").textContent =
+      state.screen === "final" ? "عرض نتيجتك ›" : inGame ? "أكمل اللعب ›" : "ابدأ";
+  }
+
+  function goHome() {
+    if (histState() === "game") history.back(); // ينتهي في onPopState
+    else showHome();
+  }
+
+  function enterGame() {
+    if (histState() !== "game") history.pushState({ v: "game" }, "");
+    resume();
+  }
+
+  function playOpening(autostart) {
+    history.pushState({ v: "opening" }, "");
+    Opening.play({
+      autostart,
+      done: () => { if (histState() === "opening") history.back(); }
+    });
+  }
+
+  function onPopState() {
+    if (Opening.isOpen()) Opening.skip();
+    if (histState() === "game" && state.screen !== "intro") resume();
+    else showHome();
   }
 
   /* ===================== شريط التقدم ===================== */
   function updateProgress() {
     const bar = $("#bar");
     const counter = $("#counter");
-    if (state.screen === "sort") {
+    if (view === "intro") {
+      bar.style.width = "0%";
+      counter.textContent = "";
+    } else if (state.screen === "sort") {
       const ratio = state.placed.length / ALL_SCRAPS.length;
       bar.style.width = (ratio * 70).toFixed(1) + "%";
       counter.textContent = toAr(state.placed.length) + " من " + toAr(ALL_SCRAPS.length);
@@ -599,7 +650,7 @@
   function onReset() {
     clearSave();
     state = freshState();
-    showScreen("intro");
+    goHome();
   }
 
   /* ===================== نوافذ ===================== */
@@ -646,10 +697,14 @@
 
     $("#startBtn").addEventListener("click", () => {
       Opening.stopAudio();
-      state.startTime = Date.now();
-      showScreen("sort");
-      renderSort();
+      if (state.screen === "intro") {
+        state.startTime = Date.now();
+        state.screen = "sort";
+      }
+      enterGame();
     });
+    $("#replayBtn").addEventListener("click", () => playOpening(true));
+    window.addEventListener("popstate", onPopState);
     $("#checkBtn").addEventListener("click", onCheckOrder);
     $("#copyBtn").addEventListener("click", onCopyCode);
     $("#saveBtn").addEventListener("click", onSaveCard);
@@ -660,6 +715,19 @@
       }
     });
 
+    // سجل البداية دائمًا صفحة البداية، ليعيد إليها زر الرجوع بدل مغادرة الموقع
+    history.replaceState({ v: "home" }, "");
+    if (state.screen === "final" && !state.endTime) state.screen = "order";
+    if (state.screen !== "intro") {
+      enterGame();
+    } else {
+      showHome();
+      if (Opening.shouldShow()) playOpening(false);
+    }
+  }
+
+  /* يعرض مرحلة اللعب المحفوظة */
+  function resume() {
     if (state.screen === "sort") {
       showScreen("sort");
       renderSort();
@@ -672,11 +740,10 @@
       } else {
         startOrderPhase();
       }
-    } else if (state.screen === "final" && state.endTime) {
+    } else if (state.screen === "final") {
       showFinal();
     } else {
-      showScreen("intro");
-      if (Opening.shouldShow()) Opening.play();
+      showHome();
     }
   }
 

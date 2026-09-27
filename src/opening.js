@@ -27,7 +27,7 @@ const Opening = (function () {
   let W = 0, H = 0, dpr = 1;
   let particles = [];
   let mapImg = null, mapPts = null;
-  let sceneIdx = -1, t0 = 0, raf = 0, running = false, onDone = null;
+  let sceneIdx = -1, t0 = 0, raf = 0, running = false, started = false, onDone = null, wired = false;
   const sprites = {};
 
   function store(get, key, val) {
@@ -255,25 +255,45 @@ const Opening = (function () {
   }
 
   /* ---------- التشغيل ---------- */
+  function isOpen() {
+    return !!root && !root.hidden && !root.classList.contains("out");
+  }
+
   function finish() {
-    if (!running && root.hidden) return;
+    if (!isOpen()) return;
     running = false;
     cancelAnimationFrame(raf);
     window.removeEventListener("resize", resize);
     store(false, SEEN_KEY, "1");
     root.classList.add("out");
-    setTimeout(() => { root.hidden = true; root.classList.remove("out", "playing"); }, 600);
-    if (onDone) onDone();
+    setTimeout(() => {
+      if (!root.classList.contains("out")) return; // أُعيد تشغيلها قبل انتهاء التلاشي
+      root.hidden = true;
+      root.classList.remove("out", "playing");
+    }, 600);
+    const done = onDone;
+    onDone = null;
+    if (done) done();
+  }
+
+  function skip() {
+    fadeAudio(400);
+    finish();
   }
 
   function begin() {
+    if (started) return;
+    started = true;
     root.classList.add("playing");
+    if (audio) audio.pause();
+    audio = null;
     if (store(true, MUTE_KEY) !== "1") {
       audio = new Audio(AUDIO_SRC);
       audio.volume = 0.9;
       audio.play().catch(() => { /* الصوت غير مدعوم أو ممنوع — تستمر الحركة */ });
     }
-    loadMap().then(() => {
+    (mapImg ? Promise.resolve() : loadMap()).then(() => {
+      if (!isOpen()) return; // تُخطّيت أثناء التحميل
       resize();
       makeParticles();
       window.addEventListener("resize", resize);
@@ -284,15 +304,26 @@ const Opening = (function () {
     });
   }
 
-  function play(done) {
-    onDone = done;
-    root = document.getElementById("opening");
-    canvas = document.getElementById("openingCanvas");
-    ctx = canvas.getContext("2d");
+  /* opts.autostart: تبدأ فورًا دون شاشة الترحيب (إعادة العرض بنقرة من اللاعب، فالصوت مسموح).
+   * opts.done: يُستدعى عند الانتهاء أو التخطي. */
+  function play(opts) {
+    opts = opts || {};
+    if (!wired) {
+      wired = true;
+      root = document.getElementById("opening");
+      canvas = document.getElementById("openingCanvas");
+      ctx = canvas.getContext("2d");
+      document.getElementById("openingPlay").addEventListener("click", begin);
+      document.getElementById("openingSkip").addEventListener("click", skip);
+    }
+    onDone = opts.done || null;
+    started = false;
+    running = false;
+    cancelAnimationFrame(raf);
+    root.classList.remove("out", "playing");
     root.hidden = false;
-    document.getElementById("openingPlay").addEventListener("click", begin, { once: true });
-    document.getElementById("openingSkip").addEventListener("click", () => { fadeAudio(400); finish(); });
+    if (opts.autostart) begin();
   }
 
-  return { shouldShow, play, stopAudio: () => fadeAudio(900) };
+  return { shouldShow, play, skip, isOpen, stopAudio: () => fadeAudio(900) };
 })();
