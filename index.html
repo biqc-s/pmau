@@ -109,14 +109,10 @@
     <div class="stat"><span class="v" id="stTries">—</span><span class="l">محاولات خاطئة</span></div>
   </div>
   <div class="reg" id="regBlock">
-    <p class="reg-line" id="regLine"></p>
-    <div class="code">
-      <span class="v" id="stCode">—</span>
-      <button id="copyBtn" class="btn-quiet ui">نسخ الرمز</button>
-    </div>
-    <button id="saveBtn" class="btn-quiet ui">١. احفظ البطاقة</button>
-    <button id="regBtn" class="ui big">٢. أكمل المشاركة</button>
-    <p class="reg-note" id="regNote">يفتح نموذج إتمام المشاركة في تبويب جديد — ارفع فيه البطاقة والصق الرمز، أقل من دقيقة.</p>
+    <p class="reg-line">بقيت خطوة واحدة لإكمال مشاركتك</p>
+    <div class="code"><span class="l">رمز الإتمام:</span><span class="v" id="stCode">—</span></div>
+    <button id="showCardBtn" class="ui big">اعرض بطاقة الإتمام ›</button>
+    <p class="reg-note">تفتح بطاقتك في صفحة مستقلة مع خطوات الرفع: تصوّرها، ثم ترفعها في رابط المشاركة.</p>
   </div>
   <div class="actions">
     <button id="resetBtn" class="btn-quiet ui">ابدأ من جديد</button>
@@ -131,6 +127,62 @@
     <p class="ftr-help">للمشاكل التقنية أو الرفع المباشر: <a href="mailto:admin@i3j.io">admin@i3j.io</a> <span aria-hidden="true">·</span> <a href="mailto:s240022888@seu.edu.sa">s240022888@seu.edu.sa</a></p>
   </footer>
   <canvas id="cardCanvas" width="1080" height="1350"></canvas>
+</main>
+
+<!-- ===================== بطاقة الإتمام (للتصوير والرفع) ===================== -->
+<main id="cardScreen" class="screen card-screen" hidden>
+  <div class="rcard" id="rcard">
+    <div class="rc-band" aria-hidden="true"></div>
+    <div class="rc-body">
+      <img class="rc-portrait" src="assets/musaid.jpg" alt="صورة الأمير مساعد بن عبدالرحمن آل سعود">
+      <b class="rc-name">الأمير مساعد بن عبدالرحمن آل&nbsp;سعود</b>
+      <span class="rc-sub">رحمه الله · أخو الملك المؤسس</span>
+      <p class="rc-kicker">اليوم الوطني السعودي ٩٦</p>
+      <h2 class="rc-title">لعبة الأرشيف</h2>
+      <p class="rc-lbl">رمز الإتمام</p>
+      <p class="rc-code" id="rcCode">—</p>
+      <div class="rc-stats">
+        <span><b id="rcTime">—</b>مدة البحث</span>
+        <span><b id="rcTries">—</b>محاولات خاطئة</span>
+      </div>
+      <p class="rc-foot">كلية الحوسبة والمعلوماتية · <span id="rcDate"></span></p>
+    </div>
+    <div class="rc-band" aria-hidden="true"></div>
+  </div>
+
+  <section class="howto" aria-labelledby="howtoTitle">
+    <h3 id="howtoTitle">أكمل مشاركتك في ٣ خطوات</h3>
+    <ol class="hsteps">
+      <li>
+        <span class="n">١</span>
+        <div>
+          <p><b>صوّر الشاشة</b> والبطاقة ظاهرة كاملة في أعلاها.</p>
+          <small>آيفون: الزر الجانبي + زر رفع الصوت معًا<br>أندرويد: زر التشغيل + زر خفض الصوت معًا</small>
+          <button id="toCardBtn" class="btn-quiet ui" type="button">↑ أظهر البطاقة للتصوير</button>
+        </div>
+      </li>
+      <li>
+        <span class="n">٢</span>
+        <div>
+          <p><b>انسخ رمز الإتمام</b> لتلصقه في النموذج.</p>
+          <button id="copyBtn" class="btn-quiet ui" type="button">نسخ الرمز</button>
+        </div>
+      </li>
+      <li>
+        <span class="n">٣</span>
+        <div id="regStep">
+          <p><b>افتح رابط المشاركة</b>، ثم ارفع صورة البطاقة من معرض الصور، والصق الرمز، وأرسل.</p>
+          <button id="regBtn" class="ui big" type="button">افتح رابط المشاركة ↗</button>
+        </div>
+      </li>
+    </ol>
+    <p class="howto-alt">
+      متصفحك يدعم حفظ الصور؟
+      <button id="saveBtn" class="link" type="button">احفظ البطاقة صورةً بدل التصوير</button>
+      <span id="saveMsg" class="save-msg" role="status"></span>
+    </p>
+    <button id="cardBack" class="btn-quiet ui" type="button">↩ رجوع إلى النتيجة</button>
+  </section>
 </main>
 
 <!-- ===================== نافذة كيف ألعب ===================== -->
