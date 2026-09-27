@@ -46,10 +46,10 @@
       placed: [],
       rotations: {},
       lifted: null,
-      order: null,
-      pickedIndex: null,
-      orderChecked: false,
-      correctMask: null
+      pool: null,
+      slots: null,
+      locked: null,
+      returned: []
     };
   }
 
@@ -208,98 +208,136 @@
     renderSort();
   }
 
-  /* ===================== شاشة الترتيب ===================== */
+  /* ===================== شاشة الترتيب =====================
+   * اللاعب ينقر الملفات بالترتيب من الأقدم إلى الأحدث، فيذهب كل ملف إلى أول موضع فارغ.
+   * النقر على ملف في الخط الزمني يعيده. عند الاعتماد تُثبَّت المواضع الصحيحة وتعود الخاطئة.
+   * slots[i] = معرّف الملف في الموضع i أو null، و locked[i] = الموضع مثبّت صحيحًا.
+   * pool = ترتيب عشوائي ثابت لكل الملفات، تُعرض منه غير الموضوعة. */
   function startOrderPhase() {
-    let order = shuffle(CORRECT_ORDER);
-    if (order.every((id, i) => id === CORRECT_ORDER[i])) {
-      order = shuffle(order);
-    }
-    state.order = order;
-    state.pickedIndex = null;
-    state.orderChecked = false;
-    state.correctMask = null;
+    state.pool = shuffle(CORRECT_ORDER);
+    state.slots = CORRECT_ORDER.map(() => null);
+    state.locked = CORRECT_ORDER.map(() => false);
+    state.returned = [];
     showScreen("order");
+    defaultOrderGuide();
     renderOrder();
   }
 
-  function renderOrder(justChecked) {
+  function firstEmpty() {
+    return state.slots.indexOf(null);
+  }
+
+  function setOrderGuide(text, isErr) {
+    $("#orderText").textContent = text;
+    $("#orderGuide").classList.toggle("err", !!isErr);
+  }
+
+  function defaultOrderGuide() {
+    const next = firstEmpty();
+    if (next === -1) {
+      setOrderGuide("اكتمل الخط الزمني. راجع التواريخ ثم اضغط «اعتمد الترتيب».");
+    } else if (state.slots.every((s) => s === null)) {
+      setOrderGuide("ابدأ بالأقدم: انقر الملف صاحب أقدم تاريخ ليأخذ الموضع ١.");
+    } else {
+      setOrderGuide("انقر الملف التالي في القِدم ليأخذ الموضع " + toAr(next + 1) + ".");
+    }
+  }
+
+  function renderOrder() {
     const list = $("#orderList");
-    const last = state.order.length - 1;
+    const pool = $("#orderPool");
+    const next = firstEmpty();
+    const returned = state.returned || [];
     list.innerHTML = "";
-    state.order.forEach((fileId, i) => {
-      const f = FILES.find((x) => x.id === fileId);
-      const el = document.createElement("div");
-      const mark = state.correctMask ? (state.correctMask[i] ? " correct" : " incorrect") : "";
-      el.className = "order-item" + (state.pickedIndex === i ? " picked" : "") + mark;
-      el.style.setProperty("--fcolor", "var(--" + fileColor(fileId) + ")");
+    pool.innerHTML = "";
+
+    state.slots.forEach((fileId, i) => {
+      const el = document.createElement("button");
+      el.type = "button";
       el.dataset.index = String(i);
-      el.innerHTML =
-        '<span class="pos">' + toAr(i + 1) + "</span>" +
-        '<span class="oi-main">' +
-        '<span class="fn">' + f.name + "</span>" +
-        '<span class="od">' + f.date + "</span>" +
-        "</span>" +
-        '<span class="oi-moves">' +
-        '<button class="mv" type="button" aria-label="تحريك للأعلى"' + (i === 0 ? " disabled" : "") + ">▲</button>" +
-        '<button class="mv" type="button" aria-label="تحريك للأسفل"' + (i === last ? " disabled" : "") + ">▼</button>" +
-        "</span>";
-      el.addEventListener("click", () => onOrderItemClick(i));
-      const [up, down] = el.querySelectorAll(".mv");
-      up.addEventListener("click", (e) => { e.stopPropagation(); moveOrderItem(i, -1); });
-      down.addEventListener("click", (e) => { e.stopPropagation(); moveOrderItem(i, 1); });
-      if (justChecked && state.correctMask && !state.correctMask[i]) {
-        el.classList.add("wrong");
-        setTimeout(() => el.classList.remove("wrong"), 350);
+      const pos = '<span class="pos">' + (state.locked[i] ? "✓" : toAr(i + 1)) + "</span>";
+      if (fileId === null) {
+        el.className = "order-item empty" + (i === next ? " next" : "");
+        el.disabled = true;
+        el.innerHTML = pos + '<span class="oi-main"><span class="fn">' +
+          (i === next ? "الموضع التالي" : "موضع فارغ") + "</span></span>";
+      } else {
+        const f = FILES.find((x) => x.id === fileId);
+        el.className = "order-item" + (state.locked[i] ? " correct" : "");
+        el.style.setProperty("--fcolor", "var(--" + fileColor(fileId) + ")");
+        el.disabled = state.locked[i];
+        el.setAttribute("aria-label", f.name + (state.locked[i] ? " — مثبّت في موضعه" : " — انقر لإعادته"));
+        el.innerHTML = pos +
+          '<span class="oi-main"><span class="fn">' + f.name + '</span><span class="od">' + f.date + "</span></span>" +
+          (state.locked[i] ? "" : '<span class="oi-act" aria-hidden="true">✕</span>');
+        el.addEventListener("click", () => unplace(i));
       }
       list.appendChild(el);
     });
+
+    const remaining = state.pool.filter((id) => !state.slots.includes(id));
+    $("#poolTtl").hidden = remaining.length === 0;
+    remaining.forEach((fileId) => {
+      const f = FILES.find((x) => x.id === fileId);
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "order-item in-pool" + (returned.includes(fileId) ? " wrong" : "");
+      el.style.setProperty("--fcolor", "var(--" + fileColor(fileId) + ")");
+      el.innerHTML =
+        '<span class="oi-main"><span class="fn">' + f.name + '</span><span class="od">' + f.date + "</span></span>" +
+        '<span class="oi-act" aria-hidden="true">＋</span>';
+      el.addEventListener("click", () => place(fileId));
+      pool.appendChild(el);
+    });
+    state.returned = [];
+
+    $("#checkBtn").disabled = next !== -1;
     updateProgress();
     save();
   }
 
-  function moveOrderItem(i, dir) {
-    const j = i + dir;
-    if (j < 0 || j >= state.order.length) return;
-    const a = state.order;
-    [a[i], a[j]] = [a[j], a[i]];
-    state.correctMask = null;
-    state.pickedIndex = null;
+  function place(fileId) {
+    const i = firstEmpty();
+    if (i === -1) return;
+    state.slots[i] = fileId;
+    defaultOrderGuide();
     renderOrder();
   }
 
-  function onOrderItemClick(i) {
-    state.correctMask = null;
-    if (state.pickedIndex === null) {
-      state.pickedIndex = i;
-    } else if (state.pickedIndex === i) {
-      state.pickedIndex = null;
-    } else {
-      const arr = state.order;
-      [arr[state.pickedIndex], arr[i]] = [arr[i], arr[state.pickedIndex]];
-      state.pickedIndex = null;
-    }
+  function unplace(i) {
+    if (state.locked[i]) return;
+    state.slots[i] = null;
+    defaultOrderGuide();
     renderOrder();
   }
 
   function onCheckOrder() {
-    const correctMask = state.order.map((id, i) => id === CORRECT_ORDER[i]);
-    const allCorrect = correctMask.every(Boolean);
-    state.correctMask = correctMask;
-    renderOrder(true);
+    if (firstEmpty() !== -1) return;
+    const wrong = [];
+    state.slots.forEach((id, i) => {
+      if (id === CORRECT_ORDER[i]) {
+        state.locked[i] = true;
+      } else {
+        wrong.push(id);
+        state.slots[i] = null;
+      }
+    });
 
-    if (allCorrect) {
-      $("#orderText").textContent = "الترتيب صحيح! الأرشيف مُرتّب بالكامل.";
-      $("#orderGuide").classList.remove("err");
+    if (wrong.length === 0) {
+      setOrderGuide("الترتيب صحيح! الأرشيف مُرتّب بالكامل.");
       state.endTime = Date.now();
-      save();
-      setTimeout(showFinal, 600);
+      renderOrder();
+      setTimeout(showFinal, 700);
     } else {
-      const correctCount = correctMask.filter(Boolean).length;
       state.tries += 1;
-      $("#orderText").textContent =
-        "الملفات المظلّلة بالأحمر في غير موضعها الصحيح (" + toAr(correctCount) + " من " + toAr(correctMask.length) + " في موضعه). حرّكها بالأسهم حسب التواريخ، وحاول مجددًا.";
-      $("#orderGuide").classList.add("err");
-      save();
+      state.returned = wrong;
+      const ok = state.slots.length - wrong.length;
+      setOrderGuide(
+        (ok ? toAr(ok) + " في موضعها الصحيح وثُبّتت ✓. " : "") +
+        "عادت " + toAr(wrong.length) + " إلى الأسفل — ضعها في المواضع الفارغة حسب تواريخها.",
+        true
+      );
+      renderOrder();
     }
   }
 
@@ -546,9 +584,15 @@
     if (state.screen === "sort") {
       showScreen("sort");
       renderSort();
-    } else if (state.screen === "order" && state.order) {
-      showScreen("order");
-      renderOrder();
+    } else if (state.screen === "order") {
+      // حفظ من نسخة سابقة بلا slots: نبدأ مرحلة الترتيب من جديد دون خسارة الفرز
+      if (Array.isArray(state.slots)) {
+        showScreen("order");
+        defaultOrderGuide();
+        renderOrder();
+      } else {
+        startOrderPhase();
+      }
     } else if (state.screen === "final" && state.endTime) {
       showFinal();
     } else {
